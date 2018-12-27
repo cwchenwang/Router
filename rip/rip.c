@@ -7,7 +7,7 @@ TRipPkt *ripResponsPkt = NULL;
 struct in_addr pcLocalAddr[10];//存储本地接口ip地址
 char *pcLocalName[10] = {};//存储本地接口的接口名
 struct in_addr pcLocalMask[10];
-int interfaceCnt = 0;
+int interCount = 0;
 
 int directConnect(struct in_addr a, struct in_addr b, struct in_addr m)
 {
@@ -73,7 +73,7 @@ void rippacket_Receive()
     }
 
     //把本地地址加入到组播中
-    for(int i = 0; i < interfaceCnt; i ++)
+    for(int i = 0; i < interCount; i ++)
     {
         struct ip_mreq mreq;
         mreq.imr_multiaddr.s_addr=inet_addr(RIP_GROUP);
@@ -117,7 +117,7 @@ void rippacket_Receive()
         }
         /*
         int isFromMe = 0;
-        for(int i = 0;i < interfaceCnt; i++)
+        for(int i = 0;i < interCount; i++)
             if(local_addr.sin_addr.s_addr == pcLocalAddr[i].s_addr)
             {
                 isFromMe = 1;
@@ -242,7 +242,7 @@ void rippacket_Multicast(struct in_addr pcLocalAddr, struct RipPacket * ripPacke
     //防止绑定地址冲突，仅供参考
     //设置地址重用
     int  iReUseddr = 1;
-    if (setsockopt(sendfd,SOL_SOCKET ,SO_REUSEADDR,(const char*)&iReUseddr,sizeof(iReUseddr))<0)
+    if (setsockopt(sendfd,SOL_SOCKET, SO_REUSEADDR,(const char*)&iReUseddr,sizeof(iReUseddr))<0)
     {
         perror("reuse addr error\n");
         exit(-1);
@@ -342,15 +342,16 @@ void request_Handle(struct in_addr stSourceIp)
             ripResponsPkt->RipEntries[ripResponsPkt->ripEntryCount].stPrefixLen = now->uiPrefixLen;
             ripResponsPkt->RipEntries[ripResponsPkt->ripEntryCount].usFamily = htons(2);
             ripResponsPkt->RipEntries[ripResponsPkt->ripEntryCount].usTag = 0;
-            ripResponsPkt->ripEntryCount ++;
+            ripResponsPkt->ripEntryCount++;
             now = now->pstNext;
         }
         if(ripResponsPkt->ripEntryCount)
         {
-            for(int i = 0; i < interfaceCnt ; i ++)if(directConnect(pcLocalAddr[i], stSourceIp, pcLocalMask[i]))
-            {
-                rippacket_Send(stSourceIp, pcLocalAddr[i]);
-            }
+            for(int i = 0; i < interCount ; i ++)
+            	if(!directConnect(pcLocalAddr[i], stSourceIp, pcLocalMask[i]))
+            	{
+               		rippacket_Send(stSourceIp, pcLocalAddr[i]);
+           		}
         }
     }
 }
@@ -367,7 +368,7 @@ void request_Handle(struct in_addr stSourceIp)
 *******************************************************/
 void response_Handle(struct in_addr stSourceIp)
 {
-    printf("        Update my Rip route table!!!\n");
+    printf("--------------Update my Rip route table!!!\n");
     struct timeval tv;
     gettimeofday(&tv,NULL);
     int needUpdate = 0;
@@ -380,7 +381,7 @@ void response_Handle(struct in_addr stSourceIp)
             if(now->stIpPrefix.s_addr == ripReceivePkt->RipEntries[i].stAddr.s_addr)
             {
                 find = 1;
-                uint32_t my = htonl(now->uiMetric), his = htonl(ripReceivePkt->RipEntries[i].uiMetric) + 1;
+                uint32_t my = htonl(now->uiMetric), his = htonl(ripReceivePkt->RipEntries[i].uiMetric);
                 if(his > RIP_INFINITY)// delete this route in Route Table
                 {
                     now->isValid = ROUTE_NOTVALID;
@@ -430,7 +431,7 @@ void response_Handle(struct in_addr stSourceIp)
             {
                 now->isValid = ROUTE_NOTVALID;
             }
-            for(int i = 0; i < interfaceCnt; i ++)
+            for(int i = 0; i < interCount; i ++)
                 if(directConnect(stSourceIp, pcLocalAddr[i], pcLocalMask[i]))
                 {
                     now->pcIfname = (char *) malloc(sizeof(IF_NAMESIZE));
@@ -444,16 +445,18 @@ void response_Handle(struct in_addr stSourceIp)
     TRtEntry *now = g_pstRouteEntry;
     while(now != NULL)
     {
-        printf("            ipPrefix=%16s ", inet_ntoa(now->stIpPrefix));
-        printf("nextHop=%16s", inet_ntoa(now->stNexthop));
-        printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
+        printf("    ipPrefix=%16s ", inet_ntoa(now->stIpPrefix));
+        printf("nextHop=%16s ", inet_ntoa(now->stNexthop));
+        printf("prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
         now=now->pstNext;
     }
     if(needUpdate)
     {
-        printf("Update triggered!!! I need to tell my neighbours!!!\n");
+    	printf("fuck you");
+       // printf("mmp!!!Update triggered!!! I need to tell my neighbours!!!\n");
+       // printf("Update triggered!!! I need to tell my neighbours!!!\n");
         send_update_to_neighbour();
-
+        printf("Update finished\n");
     }
 }
 
@@ -471,17 +474,17 @@ void response_Handle(struct in_addr stSourceIp)
 void route_SendForward(unsigned int uiCmd, TRtEntry *pstRtEntry)
 {
     //建立tcp短连接，发送插入、删除路由表项信息到转发引擎
-    printf("Send message to my forward engine:");
+    printf("Something need to notify my forward engine:");
     if(uiCmd == AddRoute)
     {
         printf("    Add a new route!");
     }else
     {
-        printf("    Delete a old route!");
+        printf("    Delelte a old route!");
     }
-    printf("    ipPrefix=%s ",inet_ntoa(pstRtEntry->stIpPrefix));
-    printf("nextHop=%s ", inet_ntoa(pstRtEntry->stNexthop));
-    printf("prefixLen=%s\n", inet_ntoa(pstRtEntry->uiPrefixLen));
+    printf("        ipPrefix=%16s ",inet_ntoa(pstRtEntry->stIpPrefix));
+    printf("nextHop=%16s", inet_ntoa(pstRtEntry->stNexthop));
+    printf(" prefixLen=%16s\n", inet_ntoa(pstRtEntry->uiPrefixLen));
 
     int sendfd;
     int sendlen=0;
@@ -500,7 +503,7 @@ void route_SendForward(unsigned int uiCmd, TRtEntry *pstRtEntry)
 
     memset(&dst_addr, 0, sizeof(struct sockaddr_in));
     dst_addr.sin_family = AF_INET;
-    dst_addr.sin_port = htons(800);
+    dst_addr.sin_port   = htons(800);
     dst_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     if ((sendfd = socket(AF_INET, SOCK_STREAM,0 )) == -1)
     {
@@ -508,7 +511,7 @@ void route_SendForward(unsigned int uiCmd, TRtEntry *pstRtEntry)
         exit(-1);
     }
 
-    while(tcpcount < 6)
+    while(tcpcount <6)
     {
         if(connect(sendfd,(struct sockaddr*)&dst_addr,sizeof(dst_addr))<0)
         {
@@ -519,7 +522,7 @@ void route_SendForward(unsigned int uiCmd, TRtEntry *pstRtEntry)
         }
         sleep(1);
     }
-    if(tcpcount < 6)
+    if(tcpcount<6)
     {
         sendlen = send(sendfd, buf, sizeof(buf), 0); //struct sockaddr *)&dst_addr, sizeof(struct sockaddr_in));
         if (sendlen <= 0)
@@ -539,6 +542,7 @@ void route_SendForward(unsigned int uiCmd, TRtEntry *pstRtEntry)
 void rippacket_Update(struct in_addr pcLocalAddr)
 {
     //遍历rip路由表，封装更新报文
+    printf("Send update to %s\n", inet_ntoa(pcLocalAddr));
     TRtEntry *now = g_pstRouteEntry;
     struct timeval tv;
     gettimeofday(&tv,NULL);
@@ -552,18 +556,25 @@ void rippacket_Update(struct in_addr pcLocalAddr)
         {
             if(!directConnect(now->stIpPrefix, pcLocalAddr, now->uiPrefixLen))
             {
+            	
                 if(tv.tv_sec - now->lastUpdataTime > ROUTE_MAX_INTERVAL && now->uiMetric != htonl(1))
                 {
                     printf("%d %d\n", tv.tv_sec, now->lastUpdataTime);
                     now->isValid = ROUTE_NOTVALID;
                 }
-                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stAddr = now->stIpPrefix;
-                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stNexthop = now->stNexthop;
-                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].uiMetric = (now->isValid == ROUTE_NOTVALID || directConnect(pcLocalAddr, now->stNexthop, now->uiPrefixLen))?htonl(RIP_INFINITY):now->uiMetric;//poison reverse
-                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stPrefixLen = now->uiPrefixLen;
-                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usFamily = htons(2);
-                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usTag = 0;
-                ripSendUpdPkt->ripEntryCount ++;
+
+                if(!(now->isValid == ROUTE_NOTVALID || directConnect(pcLocalAddr, now->stNexthop, now->uiPrefixLen))) {
+                	printf("    ipPrefix=%16s ", inet_ntoa(now->stIpPrefix));
+       				printf("nextHop=%16s", inet_ntoa(now->stNexthop));
+        			printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
+	                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stAddr = now->stIpPrefix;
+	                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stNexthop = now->stNexthop;
+	                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].uiMetric = now->uiMetric;//poison reverse
+	                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].stPrefixLen = now->uiPrefixLen;
+	                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usFamily = htons(2);
+	                ripSendUpdPkt->RipEntries[ripSendUpdPkt->ripEntryCount].usTag = 0;
+	                ripSendUpdPkt->ripEntryCount++;
+            	}
             }
             now = now->pstNext;
         }
@@ -600,18 +611,19 @@ void routeTableDelete()//Delete not valid item
 
 void send_update_to_neighbour()
 {
-    for(int i = 0; i < interfaceCnt ; i++)
+	printf("in sending update to neighbours\n");
+    for(int i = 0; i < interCount ; i++)
     {
         rippacket_Update(pcLocalAddr[i]);
     }
     routeTableDelete();
-    printf("This is my now rip table!\n");
+    printf("    This is my now rip table!\n");
     TRtEntry *now = g_pstRouteEntry;
     while(now != NULL)
     {
-        printf("    ipPrefix=%s ", inet_ntoa(now->stIpPrefix));
-        printf("nextHop=%s ", inet_ntoa(now->stNexthop));
-        printf("prefixLen=%s metric=%d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
+        printf("    ipPrefix=%16s ", inet_ntoa(now->stIpPrefix));
+        printf("nextHop=%16s", inet_ntoa(now->stNexthop));
+        printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(now->uiPrefixLen), htonl(now->uiMetric));
         now=now->pstNext;
     }
 }
@@ -630,36 +642,31 @@ void send_Request()
 {
     sleep(1);
     requestpkt_Encapsulate();
-    for (int i = 0; i < interfaceCnt; i ++)
+    for (int i = 0; i < interCount; i ++)
     {
         rippacket_Multicast(pcLocalAddr[i], ripSendReqPkt);
     }
 }
+
 void ripdaemon_Start()
 {
     //创建更新线程，30s更新一次,向组播地址更新Update包
     pthread_t tid;
-    if(pthread_create(&tid, NULL, update_thread, NULL) < 0) {
-        perror("Update thread create error\n");
+    int ret = pthread_create(&tid, NULL, update_thread, NULL);
+    if (ret != 0)
+    {
+        perror("new thread error!\n");
         exit(-1);
     }
-    // if (ret != 0)
-    // {
-    //     perror("new thread error!\n");
-    //     exit(-1);
-    // }
 
     //封装请求报文，并组播
     pthread_t tid2;
-    if(pthread_create(&tid2, NULL, send_Request, NULL) < 0) {
-        perror("Request thread create error\n");
+    int ret2 = pthread_create(&tid2, NULL, send_Request, NULL);
+    if(ret2 != 0)
+    {
+        perror("new thread error!\n");
         exit(-1);
     }
-    // if(ret2 != 0)
-    // {
-    //     perror("new thread error!\n");
-    //     exit(-1);
-    // }
     //接收rip报文
     rippacket_Receive();
 }
@@ -667,25 +674,31 @@ void ripdaemon_Start()
 void routentry_Insert()
 {
     //将本地接口表添加到rip路由表里
-    printf("%s\n", "Insert local interface info...");
+    printf("%s\n","Add interfaces into Rip Route Table");
     struct timeval tv;
     gettimeofday(&tv,NULL);
-    TRtEntry *cur = g_pstRouteEntry;
-    for(int i = 0; i < interfaceCnt; i++, cur=cur->pstNext)
+    TRtEntry *j = g_pstRouteEntry;
+    for(int i = 0; i < interCount;i ++, j=j->pstNext)
     {
-        cur->stIpPrefix.s_addr = pcLocalAddr[i].s_addr & pcLocalMask->s_addr;
-        cur->stNexthop.s_addr = inet_addr("0.0.0.0");
-        cur->uiPrefixLen = pcLocalMask[i];
-        cur->uiMetric = htonl(1);
-        cur->pstNext = NULL;
-        cur->lastUpdataTime = tv.tv_sec;
-        cur->isValid = ROUTE_VALID;
-        cur->pcIfname = (char *) malloc(sizeof(IF_NAMESIZE));
-        strcpy(cur->pcIfname, (const char *) pcLocalName[i]);
-        if(i < interfaceCnt - 1)
+        j->stIpPrefix.s_addr = pcLocalAddr[i].s_addr & pcLocalMask->s_addr;
+        j->stNexthop.s_addr = inet_addr("0.0.0.0");
+        j->uiPrefixLen = pcLocalMask[i];
+        j->uiMetric = htonl(1);
+        j->pstNext = NULL;
+        j->lastUpdataTime = tv.tv_sec;
+        j->isValid = ROUTE_VALID;
+        j->pcIfname = (char *) malloc(sizeof(IF_NAMESIZE));
+        strcpy(j->pcIfname, (const char *) pcLocalName[i]);
+        route_SendForward(AddRoute, j);
+        /*
+        printf("    %d ipPrefix=%16s ",i, inet_ntoa(j->stIpPrefix));
+        printf("nextHop=%16s", inet_ntoa(j->stNexthop));
+        printf(" prefixLen=%16s metric=%2d\n", inet_ntoa(j->uiPrefixLen), htonl(j->uiMetric));
+         */
+        if(i < interCount - 1)
         {
-            cur->pstNext = (TRtEntry *) malloc(sizeof(TRtEntry));
-            if(cur->pstNext == NULL)
+            j->pstNext = (TRtEntry *) malloc(sizeof(TRtEntry));
+            if(j->pstNext == NULL)
             {
                 perror("g_pstRouteEntry malloc error !\n");
                 exit(-1);
@@ -703,7 +716,7 @@ void localinterf_GetInfo()
 
     getifaddrs(&pstIpAddrStruct); //linux系统函数
     pstIpAddrStCur = pstIpAddrStruct;
-    printf("%s\n", "Local interface info...");
+    printf("%s\n", "Get local interfaces");
     int i = 0;
     while (pstIpAddrStruct != NULL)
     {
@@ -720,10 +733,10 @@ void localinterf_GetInfo()
                 pcLocalName[i] = (char *) malloc(sizeof(IF_NAMESIZE));
                 pcLocalMask[i] = ((struct sockaddr_in *)(pstIpAddrStruct->ifa_netmask))->sin_addr;
                 strcpy(pcLocalName[i], (const char *) pstIpAddrStruct->ifa_name);
-                printf("%d: addr = %s name = %s ", i, inet_ntoa(pcLocalAddr[i]), pcLocalName[i]);
+                printf("    %d: addr = %16s name = %s ", i, inet_ntoa(pcLocalAddr[i]), pcLocalName[i]);
                 printf("mask = %s\n",inet_ntoa(pcLocalMask[i]));
                 i++;
-                interfaceCnt++;
+                interCount++;
             }
         }
         pstIpAddrStruct = pstIpAddrStruct->ifa_next;
